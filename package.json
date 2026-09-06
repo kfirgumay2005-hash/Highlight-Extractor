@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "Highlight-Extractor",
+	"version": "1.0.1",
+	"description": "Extract highlights and bold from different notes into a single note",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

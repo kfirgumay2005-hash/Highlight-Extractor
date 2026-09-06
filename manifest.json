@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"id": "highlight_extractor",
+	"name": "Highlight-Extractor",
+	"version": "1.0.1",
+	"minAppVersion": "1.4.0",
+	"description": "Extract highlights and bold from different notes into a single note",
+	"author": "KfirG",
+	"authorUrl": "https://github.com/kfirgumay2005-hash",
 	"isDesktopOnly": false
 }
