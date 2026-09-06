@@ -1,4 +1,13 @@
-import { App, Plugin, TFile, Notice, MarkdownRenderer, Modal } from 'obsidian';
+import {
+	App,
+	Plugin,
+	TFile,
+	Notice,
+	MarkdownRenderer,
+	Modal,
+	Component,
+	MarkdownRenderChild,
+} from 'obsidian';
 import {
 	HighlightsExtractorSettings,
 	DEFAULT_SETTINGS,
@@ -12,6 +21,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		el: HTMLElement;
 		sourcePath: string;
 		config: DynamicBlockConfig;
+		component: Component;
 	}> = [];
 
 	async onload() {
@@ -105,12 +115,20 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			'highlights-extractor',
 			async (source, el, ctx) => {
 				const config = this.parseDynamicBlockConfig(source);
+				const renderChild = new MarkdownRenderChild(el);
+				ctx.addChild(renderChild);
 				this.dynamicBlocks.push({
 					el,
 					sourcePath: ctx.sourcePath,
 					config,
+					component: renderChild,
 				});
-				await this.renderDynamicBlock(el, config, ctx.sourcePath);
+				await this.renderDynamicBlock(
+					el,
+					config,
+					ctx.sourcePath,
+					renderChild,
+				);
 			},
 		);
 
@@ -261,16 +279,22 @@ export default class HighlightsExtractorPlugin extends Plugin {
 	}
 
 	async appendToNote(targetPath: string, content: string) {
-		let file = this.app.vault.getAbstractFileByPath(targetPath) as TFile;
-		if (!file) {
-			file = await this.app.vault.create(targetPath, content);
-		} else {
+		const abstractFile = this.app.vault.getAbstractFileByPath(targetPath);
+		let file: TFile;
+
+		if (abstractFile instanceof TFile) {
+			file = abstractFile;
 			const existingContent = await this.app.vault.read(file);
 			await this.app.vault.modify(
 				file,
 				existingContent + '\n\n' + content,
 			);
+		} else if (!abstractFile) {
+			file = await this.app.vault.create(targetPath, content);
+		} else {
+			return;
 		}
+
 		const leaf = this.app.workspace.getLeaf(true);
 		if (leaf) {
 			await leaf.openFile(file);
@@ -493,6 +517,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		el: HTMLElement,
 		config: DynamicBlockConfig,
 		sourcePath: string,
+		component: Component,
 	) {
 		el.empty();
 		const container = el.createDiv('highlights-dynamic-container');
@@ -571,7 +596,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			markdownContent,
 			container,
 			sourcePath,
-			this,
+			component,
 		);
 	}
 
@@ -587,6 +612,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 						block.el,
 						block.config,
 						block.sourcePath,
+						block.component,
 					);
 				});
 			}

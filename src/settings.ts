@@ -43,7 +43,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Highlights & Bold Extractor - Settings')
+			.setName('Highlights & Bold Extractor')
 			.setHeading();
 
 		new Setting(containerEl)
@@ -77,7 +77,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Daily Notes & Date Range Settings')
+			.setName('Daily Notes & Date Ranges')
 			.setHeading();
 
 		const allFolders = this.app.vault
