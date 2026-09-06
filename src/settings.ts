@@ -33,13 +33,18 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	// Required for newer Obsidian versions to avoid missing definitions warning
+	getSettingDefinitions(): Record<string, unknown> {
+		return {};
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', {
-			text: 'Highlights & Bold Extractor - Settings',
-		});
+		new Setting(containerEl)
+			.setName('Highlights & Bold Extractor - Settings')
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('Output Location')
@@ -71,13 +76,13 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		containerEl.createEl('h3', {
-			text: 'Daily Notes & Date Range Settings',
-		});
+		new Setting(containerEl)
+			.setName('Daily Notes & Date Range Settings')
+			.setHeading();
 
 		const allFolders = this.app.vault
 			.getAllLoadedFiles()
-			.filter((f) => f instanceof TFolder) as TFolder[];
+			.filter((f): f is TFolder => f instanceof TFolder);
 
 		new Setting(containerEl)
 			.setName('Daily Notes Folder')
@@ -145,7 +150,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		containerEl.createEl('h3', { text: 'Formatting & Filters' });
+		new Setting(containerEl).setName('Formatting & Filters').setHeading();
 
 		new Setting(containerEl)
 			.setName('Extraction Context')
