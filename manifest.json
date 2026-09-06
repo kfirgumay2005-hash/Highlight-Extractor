@@ -1,7 +1,7 @@
 {
-	"id": "highlight_extractor",
+	"id": "highlightextractor",
 	"name": "Highlight-Extractor",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.4.0",
 	"description": "Extract highlights and bold from different notes into a single note",
 	"author": "KfirG",
