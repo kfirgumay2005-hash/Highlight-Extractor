@@ -11,6 +11,7 @@ export interface HighlightsExtractorSettings {
 	extractContext: 'exact' | 'sentence' | 'paragraph';
 	weeklyDateRangeType: 'rolling' | 'calendar';
 	monthlyDateRangeType: 'rolling' | 'calendar';
+	quickFormatting: 'preserve' | 'plain';
 }
 
 export const DEFAULT_SETTINGS: HighlightsExtractorSettings = {
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: HighlightsExtractorSettings = {
 	extractContext: 'exact',
 	weeklyDateRangeType: 'rolling',
 	monthlyDateRangeType: 'rolling',
+	quickFormatting: 'preserve',
 };
 
 export class HighlightsExtractorSettingTab extends PluginSettingTab {
@@ -33,7 +35,6 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	// Required for newer Obsidian versions to avoid missing definitions warning
 	getSettingDefinitions(): Record<string, unknown> {
 		return {};
 	}
@@ -166,6 +167,24 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 							| 'exact'
 							| 'sentence'
 							| 'paragraph';
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Quick Commands Formatting')
+			.setDesc(
+				'Choose whether to remove formatting (like == and **) when using quick extraction commands.',
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('preserve', 'Preserve Markup')
+					.addOption('plain', 'Remove Formatting')
+					.setValue(this.plugin.settings.quickFormatting)
+					.onChange(async (value: string) => {
+						this.plugin.settings.quickFormatting = value as
+							| 'preserve'
+							| 'plain';
 						await this.plugin.saveSettings();
 					}),
 			);

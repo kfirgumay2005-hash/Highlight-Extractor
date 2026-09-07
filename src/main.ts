@@ -95,6 +95,13 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				icon: 'folder-open',
 				callback: () => this.extractFromActiveFolder(mode, name),
 			});
+
+			this.addCommand({
+				id: `copy-${id}-active-file-clipboard`,
+				name: `Copy ${name} to clipboard from active note`,
+				icon: 'clipboard-copy',
+				callback: () => this.copyFromActiveFileToClipboard(mode, name),
+			});
 		});
 
 		this.addCommand({
@@ -154,6 +161,41 @@ export default class HighlightsExtractorPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	sortFilesChronologically(files: TFile[]): TFile[] {
+		const format = this.settings.dailyNotesFormat || 'YYYY-MM-DD';
+		return files.sort((a, b) => {
+			const dateA = window.moment(a.basename, format, true);
+			const dateB = window.moment(b.basename, format, true);
+
+			if (dateA.isValid() && dateB.isValid()) {
+				return dateA.valueOf() - dateB.valueOf();
+			} else if (dateA.isValid()) {
+				return -1;
+			} else if (dateB.isValid()) {
+				return 1;
+			}
+			return a.stat.ctime - b.stat.ctime;
+		});
+	}
+
+	applyTextFormatting(
+		items: string[],
+		format: 'preserve' | 'plain' | 'swap',
+	): string[] {
+		if (format === 'preserve') return items;
+		if (format === 'plain') {
+			return items.map((i) => i.replace(/==/g, '').replace(/\*\*/g, ''));
+		}
+		if (format === 'swap') {
+			return items.map((i) => {
+				let temp = i.replace(/\*\*(.*?)\*\*/g, '$1');
+				temp = temp.replace(/==(.*?)==/g, '**$1**');
+				return temp;
+			});
+		}
+		return items;
 	}
 
 	private getContextForMatch(
@@ -319,8 +361,12 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		let content = header;
 
 		for (const [filePath, items] of Object.entries(groupedContent)) {
-			const link = `[[${filePath.replace('.md', '')}]]`;
-			content += `### From ${link}\n`;
+			// משתמשים בשם הקובץ בלבד (למשל: 31-08-2026) במקום בכל הנתיב המכוער
+			const basename =
+				filePath.split('/').pop()?.replace('.md', '') || filePath;
+			const link = `[[${filePath.replace('.md', '')}|${basename}]]`;
+
+			content += `### ${link}\n`;
 			items.forEach((item) => {
 				content += `${item}\n`;
 			});
@@ -351,7 +397,6 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				? `${finalFileName}.md`
 				: `${folderPath}/${finalFileName}.md`;
 
-		// basic deduplication
 		let counter = 1;
 		while (this.app.vault.getAbstractFileByPath(finalPath)) {
 			finalPath =
@@ -401,10 +446,10 @@ export default class HighlightsExtractorPlugin extends Plugin {
 	) {
 		const targetFolder = this.settings.dailyNotesFolder;
 		const format = this.settings.dailyNotesFormat || 'YYYY-MM-DD';
-
 		const { startDate, endDate } = this.getTargetDateRange(daysBack);
-
-		const files = this.app.vault.getMarkdownFiles();
+		const files = this.sortFilesChronologically(
+			this.app.vault.getMarkdownFiles(),
+		);
 		const groupedContent: Record<string, string[]> = {};
 
 		for (const file of files) {
@@ -417,7 +462,13 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				fileDate.isValid() &&
 				fileDate.isBetween(startDate, endDate, 'day', '[]')
 			) {
-				const items = await this.extractFromFile(file, mode);
+				let items = await this.extractFromFile(file, mode);
+				// הפעלת מחיקת עיצוב לפי ההגדרה בפקודות המהירות
+				items = this.applyTextFormatting(
+					items,
+					this.settings.quickFormatting,
+				);
+
 				if (items.length > 0) {
 					groupedContent[file.path] = items.map((t) =>
 						this.formatExtractedItem(file, t),
@@ -429,6 +480,31 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		await this.writeSummary(title, groupedContent);
 	}
 
+	async copyFromActiveFileToClipboard(
+		mode: 'highlight' | 'bold',
+		name: string,
+	) {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice('No active note found.');
+			return;
+		}
+
+		let items = await this.extractFromFile(activeFile, mode);
+		items = this.applyTextFormatting(items, this.settings.quickFormatting);
+
+		if (items.length === 0) {
+			new Notice(`No ${name} found in active note.`);
+			return;
+		}
+
+		const formattedItems = items.map((t) =>
+			this.formatExtractedItem(activeFile, t),
+		);
+		await navigator.clipboard.writeText(formattedItems.join('\n'));
+		new Notice(`Copied ${items.length} ${name} items to clipboard.`);
+	}
+
 	async extractFromActiveFile(mode: 'highlight' | 'bold', name: string) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
@@ -436,7 +512,9 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			return;
 		}
 
-		const items = await this.extractFromFile(activeFile, mode);
+		let items = await this.extractFromFile(activeFile, mode);
+		items = this.applyTextFormatting(items, this.settings.quickFormatting);
+
 		if (items.length === 0) {
 			new Notice(`No ${name} found in active note.`);
 			return;
@@ -462,14 +540,21 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		}
 
 		const folder = activeFile.parent;
-		const files = this.app.vault
-			.getMarkdownFiles()
-			.filter((f) => f.parent?.path === folder.path);
+		const files = this.sortFilesChronologically(
+			this.app.vault
+				.getMarkdownFiles()
+				.filter((f) => f.parent?.path === folder.path),
+		);
 
 		const groupedContent: Record<string, string[]> = {};
 
 		for (const file of files) {
-			const items = await this.extractFromFile(file, mode);
+			let items = await this.extractFromFile(file, mode);
+			items = this.applyTextFormatting(
+				items,
+				this.settings.quickFormatting,
+			);
+
 			if (items.length > 0) {
 				groupedContent[file.path] = items.map((t) =>
 					this.formatExtractedItem(file, t),
@@ -482,8 +567,6 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			groupedContent,
 		);
 	}
-
-	// --- Dynamic Code Block Feature ---
 
 	parseDynamicBlockConfig(source: string): DynamicBlockConfig {
 		const config: DynamicBlockConfig = {
@@ -572,13 +655,16 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			});
 		}
 
+		targetFiles = this.sortFilesChronologically(targetFiles);
+
 		let markdownContent = '';
 		for (const file of targetFiles) {
 			if (file.path === sourcePath) continue;
 			const items = await this.extractFromFile(file, config.mode);
 			if (items.length > 0) {
-				const link = `[[${file.path.replace('.md', '')}]]`;
-				markdownContent += `**From ${link}**\n`;
+				// תיקון התצוגה גם כאן, נציג רק את שם הקובץ (תאריך) בטקסט עצמו
+				const link = `[[${file.path.replace('.md', '')}|${file.basename}]]`;
+				markdownContent += `### ${link}\n`;
 				items.forEach((item) => {
 					markdownContent += `- ${item}\n`;
 				});
@@ -843,6 +929,22 @@ class CustomExtractionModal extends Modal {
 		const btnCancel = btnRow.createEl('button', { text: 'Cancel' });
 		btnCancel.onclick = () => this.close();
 
+		const btnCopy = btnRow.createEl('button', {
+			text: 'Copy to Clipboard',
+		});
+		btnCopy.onclick = async () => {
+			if (this.selectedSourcePaths.size === 0) {
+				new Notice('Please select at least one source note.');
+				return;
+			}
+			btnCopy.disabled = true;
+			btnCopy.textContent = 'Copying...';
+
+			await this.executeCopy();
+
+			this.close();
+		};
+
 		const btnExtract = btnRow.createEl('button', {
 			text: 'Extract & Append',
 			cls: 'mod-cta',
@@ -874,9 +976,10 @@ class CustomExtractionModal extends Modal {
 			.map((p) => this.app.vault.getAbstractFileByPath(p))
 			.filter((f): f is TFile => f instanceof TFile);
 
+		const sortedFiles = this.plugin.sortFilesChronologically(sourceFiles);
 		const groupedContent: Record<string, string[]> = {};
 
-		for (const file of sourceFiles) {
+		for (const file of sortedFiles) {
 			let items = await this.plugin.extractFromFile(
 				file,
 				this.mode,
@@ -884,17 +987,10 @@ class CustomExtractionModal extends Modal {
 			);
 
 			if (items.length > 0) {
-				if (this.textFormatting === 'plain') {
-					items = items.map((i) =>
-						i.replace(/==/g, '').replace(/\*\*/g, ''),
-					);
-				} else if (this.textFormatting === 'swap') {
-					items = items.map((i) => {
-						let temp = i.replace(/\*\*(.*?)\*\*/g, '$1');
-						temp = temp.replace(/==(.*?)==/g, '**$1**');
-						return temp;
-					});
-				}
+				items = this.plugin.applyTextFormatting(
+					items,
+					this.textFormatting,
+				);
 				groupedContent[file.path] = items.map((t) =>
 					this.plugin.formatExtractedItem(file, t),
 				);
@@ -906,6 +1002,46 @@ class CustomExtractionModal extends Modal {
 			groupedContent,
 			this.targetFilePath.replace('.md', ''),
 		);
+	}
+
+	async executeCopy() {
+		const sourceFiles = Array.from(this.selectedSourcePaths)
+			.map((p) => this.app.vault.getAbstractFileByPath(p))
+			.filter((f): f is TFile => f instanceof TFile);
+
+		const sortedFiles = this.plugin.sortFilesChronologically(sourceFiles);
+		let clipboardText = '';
+
+		for (const file of sortedFiles) {
+			let items = await this.plugin.extractFromFile(
+				file,
+				this.mode,
+				this.contextMode,
+			);
+
+			if (items.length > 0) {
+				items = this.plugin.applyTextFormatting(
+					items,
+					this.textFormatting,
+				);
+
+				const link = `[[${file.path.replace('.md', '')}|${file.basename}]]`;
+				clipboardText += `### ${link}\n`;
+				items.forEach((item) => {
+					clipboardText += `${this.plugin.formatExtractedItem(file, item)}\n`;
+				});
+				clipboardText += '\n';
+			}
+		}
+
+		if (clipboardText) {
+			await navigator.clipboard.writeText(clipboardText.trim());
+			new Notice(
+				`Copied extracted items from ${sourceFiles.length} files to clipboard.`,
+			);
+		} else {
+			new Notice('No items found to copy.');
+		}
 	}
 
 	onClose() {
