@@ -39,10 +39,11 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		const modes: Array<{
 			id: string;
 			name: string;
-			mode: 'highlight' | 'bold';
+			mode: 'highlight' | 'bold' | 'both' | 'all';
 		}> = [
 			{ id: 'highlights', name: 'Highlights (==)', mode: 'highlight' },
 			{ id: 'bold', name: 'Bold (**)', mode: 'bold' },
+			{ id: 'all-text', name: 'All Text', mode: 'all' },
 		];
 
 		modes.forEach(({ id, name, mode }) => {
@@ -256,7 +257,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 
 	async extractFromFile(
 		file: TFile,
-		mode: 'highlight' | 'bold' | 'both' = 'both',
+		mode: 'highlight' | 'bold' | 'both' | 'all' = 'both',
 		contextMode?: 'exact' | 'sentence' | 'paragraph',
 	): Promise<string[]> {
 		const fileCache = this.app.metadataCache.getFileCache(file);
@@ -270,6 +271,14 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		}
 
 		const content = await this.app.vault.read(file);
+
+		if (mode === 'all') {
+			return content
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0);
+		}
+
 		const results: string[] = [];
 		const regexes = [];
 
@@ -361,7 +370,6 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		let content = header;
 
 		for (const [filePath, items] of Object.entries(groupedContent)) {
-			// משתמשים בשם הקובץ בלבד (למשל: 31-08-2026) במקום בכל הנתיב המכוער
 			const basename =
 				filePath.split('/').pop()?.replace('.md', '') || filePath;
 			const link = `[[${filePath.replace('.md', '')}|${basename}]]`;
@@ -442,7 +450,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 	async generateSummaryByDateRange(
 		daysBack: number,
 		title: string,
-		mode: 'highlight' | 'bold',
+		mode: 'highlight' | 'bold' | 'both' | 'all',
 	) {
 		const targetFolder = this.settings.dailyNotesFolder;
 		const format = this.settings.dailyNotesFormat || 'YYYY-MM-DD';
@@ -463,7 +471,6 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				fileDate.isBetween(startDate, endDate, 'day', '[]')
 			) {
 				let items = await this.extractFromFile(file, mode);
-				// הפעלת מחיקת עיצוב לפי ההגדרה בפקודות המהירות
 				items = this.applyTextFormatting(
 					items,
 					this.settings.quickFormatting,
@@ -481,7 +488,7 @@ export default class HighlightsExtractorPlugin extends Plugin {
 	}
 
 	async copyFromActiveFileToClipboard(
-		mode: 'highlight' | 'bold',
+		mode: 'highlight' | 'bold' | 'both' | 'all',
 		name: string,
 	) {
 		const activeFile = this.app.workspace.getActiveFile();
@@ -505,7 +512,10 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		new Notice(`Copied ${items.length} ${name} items to clipboard.`);
 	}
 
-	async extractFromActiveFile(mode: 'highlight' | 'bold', name: string) {
+	async extractFromActiveFile(
+		mode: 'highlight' | 'bold' | 'both' | 'all',
+		name: string,
+	) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice('No active note found.');
@@ -532,7 +542,10 @@ export default class HighlightsExtractorPlugin extends Plugin {
 		);
 	}
 
-	async extractFromActiveFolder(mode: 'highlight' | 'bold', name: string) {
+	async extractFromActiveFolder(
+		mode: 'highlight' | 'bold' | 'both' | 'all',
+		name: string,
+	) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile || !activeFile.parent) {
 			new Notice('No active file to determine active folder.');
@@ -587,8 +600,14 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				if (k === 'tag') config.tag = val;
 				if (k === 'mode') {
 					const modeVal = val.toLowerCase();
-					if (['highlight', 'bold', 'both'].includes(modeVal)) {
-						config.mode = modeVal as 'highlight' | 'bold' | 'both';
+					if (
+						['highlight', 'bold', 'both', 'all'].includes(modeVal)
+					) {
+						config.mode = modeVal as
+							| 'highlight'
+							| 'bold'
+							| 'both'
+							| 'all';
 					}
 				}
 			}
@@ -662,7 +681,6 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			if (file.path === sourcePath) continue;
 			const items = await this.extractFromFile(file, config.mode);
 			if (items.length > 0) {
-				// תיקון התצוגה גם כאן, נציג רק את שם הקובץ (תאריך) בטקסט עצמו
 				const link = `[[${file.path.replace('.md', '')}|${file.basename}]]`;
 				markdownContent += `### ${link}\n`;
 				items.forEach((item) => {
@@ -710,7 +728,7 @@ interface DynamicBlockConfig {
 	timeframe?: string;
 	folder?: string;
 	tag?: string;
-	mode: 'highlight' | 'bold' | 'both';
+	mode: 'highlight' | 'bold' | 'both' | 'all';
 }
 
 class CustomExtractionModal extends Modal {
@@ -719,7 +737,7 @@ class CustomExtractionModal extends Modal {
 	targetFilePath = '';
 	searchQuery = '';
 
-	mode: 'highlight' | 'bold' | 'both' = 'both';
+	mode: 'highlight' | 'bold' | 'both' | 'all' = 'both';
 	contextMode: 'exact' | 'sentence' | 'paragraph' = 'exact';
 	textFormatting: 'preserve' | 'plain' | 'swap' = 'preserve';
 
@@ -861,11 +879,16 @@ class CustomExtractionModal extends Modal {
 			value: 'bold',
 			text: 'Bold Only (**)',
 		});
+		modeSelect.createEl('option', {
+			value: 'all',
+			text: 'All Text (Full Content)',
+		});
 		modeSelect.onchange = (e) => {
 			this.mode = (e.target as HTMLSelectElement).value as
 				| 'highlight'
 				| 'bold'
-				| 'both';
+				| 'both'
+				| 'all';
 		};
 
 		const contextCol = settingsRow.createDiv();

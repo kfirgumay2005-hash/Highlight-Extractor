@@ -1,6 +1,6 @@
 {
 	"name": "Highlight-Extractor",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"description": "Extract highlights and bold from different notes into a single note",
 	"main": "main.js",
 	"type": "module",
