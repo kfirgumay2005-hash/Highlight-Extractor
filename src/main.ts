@@ -119,6 +119,13 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			callback: () => new ArchiveMonthModal(this.app, this).open(),
 		});
 
+		this.addCommand({
+			id: 'apply-weekday-template-active-note',
+			name: 'Apply weekday template to active daily note (overwrites content)',
+			icon: 'calendar-check',
+			callback: () => this.applyWeekdayTemplateToActiveNote(),
+		});
+
 		this.registerMarkdownCodeBlockProcessor(
 			'highlights-extractor',
 			async (source, el, ctx) => {
@@ -145,6 +152,18 @@ export default class HighlightsExtractorPlugin extends Plugin {
 				this.updateDynamicBlocks(file);
 			}),
 		);
+
+		// Register the create listener only after the layout is ready,
+		// otherwise Obsidian fires 'create' for every existing file on startup.
+		this.app.workspace.onLayoutReady(() => {
+			this.registerEvent(
+				this.app.vault.on('create', (file) => {
+					if (file instanceof TFile) {
+						void this.handleNewDailyNote(file);
+					}
+				}),
+			);
+		});
 	}
 
 	onunload(): void {
@@ -158,11 +177,105 @@ export default class HighlightsExtractorPlugin extends Plugin {
 			DEFAULT_SETTINGS,
 			(data as HighlightsExtractorSettings) || {},
 		);
+		if (!Array.isArray(this.settings.weekdayTemplates)) {
+			this.settings.weekdayTemplates = [];
+		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	// ---------- Weekday templates ----------
+
+	private getWeekdayRule(
+		dayOfWeek: number,
+	): { day: number; templatePath: string } | undefined {
+		return this.settings.weekdayTemplates.find(
+			(r) => r.day === dayOfWeek && r.templatePath.trim() !== '',
+		);
+	}
+
+	applyTemplateVariables(
+		content: string,
+		date: moment.Moment,
+		title: string,
+	): string {
+		const now = window.moment();
+		return content
+			.replace(/{{\s*title\s*}}/gi, title)
+			.replace(/{{\s*date\s*(?::([^}]*?))?\s*}}/gi, (_m, fmt?: string) =>
+				date.format(fmt?.trim() || 'YYYY-MM-DD'),
+			)
+			.replace(/{{\s*time\s*(?::([^}]*?))?\s*}}/gi, (_m, fmt?: string) =>
+				now.format(fmt?.trim() || 'HH:mm'),
+			);
+	}
+
+	private async buildWeekdayContent(
+		file: TFile,
+		notify: boolean,
+	): Promise<string | null> {
+		const format = this.settings.dailyNotesFormat || 'YYYY-MM-DD';
+		const date = window.moment(file.basename, format, true);
+		if (!date.isValid()) return null;
+
+		const rule = this.getWeekdayRule(date.day());
+		if (!rule) return null;
+
+		const templateFile = this.app.vault.getAbstractFileByPath(
+			rule.templatePath,
+		);
+		if (!(templateFile instanceof TFile)) {
+			if (notify) {
+				new Notice(`Weekday template not found: ${rule.templatePath}`);
+			}
+			return null;
+		}
+		if (templateFile.path === file.path) return null;
+
+		const raw = await this.app.vault.read(templateFile);
+		return this.applyTemplateVariables(raw, date, file.basename);
+	}
+
+	async handleNewDailyNote(file: TFile) {
+		if (!this.settings.enableWeekdayTemplates) return;
+		if (file.extension !== 'md') return;
+		if (this.settings.weekdayTemplates.length === 0) return;
+
+		// Only react to freshly created files (avoids sync-created files).
+		if (Date.now() - file.stat.ctime > 10000) return;
+
+		const folder = this.settings.dailyNotesFolder;
+		if (folder && !file.path.startsWith(folder + '/')) return;
+
+		// Give the core Daily Notes plugin a moment to finish writing.
+		await new Promise((resolve) => window.setTimeout(resolve, 300));
+
+		const content = await this.buildWeekdayContent(file, true);
+		if (content === null) return;
+
+		await this.app.vault.modify(file, content);
+	}
+
+	async applyWeekdayTemplateToActiveNote() {
+		const file = this.app.workspace.getActiveFile();
+		if (!file) {
+			new Notice('No active note found.');
+			return;
+		}
+		const content = await this.buildWeekdayContent(file, true);
+		if (content === null) {
+			new Notice(
+				'No weekday template configured for this note (check the note name format and your rules).',
+			);
+			return;
+		}
+		await this.app.vault.modify(file, content);
+		new Notice('Weekday template applied.');
+	}
+
+	// ---------- Extraction ----------
 
 	sortFilesChronologically(files: TFile[]): TFile[] {
 		const format = this.settings.dailyNotesFormat || 'YYYY-MM-DD';
