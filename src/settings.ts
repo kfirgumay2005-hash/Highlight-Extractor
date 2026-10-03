@@ -1,11 +1,4 @@
-import {
-	AbstractInputSuggest,
-	App,
-	PluginSettingTab,
-	Setting,
-	TFile,
-	TFolder,
-} from 'obsidian';
+import { App, PluginSettingTab, Setting, TFolder } from 'obsidian';
 import HighlightsExtractorPlugin from './main';
 
 export interface WeekdayTemplateRule {
@@ -54,32 +47,7 @@ const WEEKDAY_NAMES = [
 	'Saturday',
 ];
 
-class TemplateFileSuggest extends AbstractInputSuggest<TFile> {
-	private textInputEl: HTMLInputElement;
-
-	constructor(app: App, inputEl: HTMLInputElement) {
-		super(app, inputEl);
-		this.textInputEl = inputEl;
-	}
-
-	getSuggestions(query: string): TFile[] {
-		const lower = query.toLowerCase();
-		return this.app.vault
-			.getMarkdownFiles()
-			.filter((f) => f.path.toLowerCase().includes(lower))
-			.slice(0, 50);
-	}
-
-	renderSuggestion(file: TFile, el: HTMLElement): void {
-		el.setText(file.path);
-	}
-
-	selectSuggestion(file: TFile): void {
-		this.textInputEl.value = file.path;
-		this.textInputEl.dispatchEvent(new Event('input'));
-		this.close();
-	}
-}
+const TEMPLATE_DATALIST_ID = 'highlights-extractor-template-notes';
 
 export class HighlightsExtractorSettingTab extends PluginSettingTab {
 	plugin: HighlightsExtractorPlugin;
@@ -109,11 +77,11 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('new-note', 'Create New Note')
 					.addOption('active-note', 'Append to Active Note')
 					.setValue(this.plugin.settings.outputLocation)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.outputLocation = value as
 							| 'new-note'
 							| 'active-note';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -125,9 +93,9 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.includeHeader)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.includeHeader = value;
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -152,9 +120,9 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 				});
 
 				dropdown.setValue(this.plugin.settings.dailyNotesFolder);
-				dropdown.onChange(async (value) => {
+				dropdown.onChange((value) => {
 					this.plugin.settings.dailyNotesFolder = value;
-					await this.plugin.saveSettings();
+					void this.plugin.saveSettings();
 				});
 			});
 
@@ -167,9 +135,9 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder('DD-MM-YYYY')
 					.setValue(this.plugin.settings.dailyNotesFormat)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.dailyNotesFormat = value;
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -181,11 +149,11 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('rolling', 'Rolling Days (past 7 days)')
 					.addOption('calendar', 'Previous Calendar Week')
 					.setValue(this.plugin.settings.weeklyDateRangeType)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.weeklyDateRangeType = value as
 							| 'rolling'
 							| 'calendar';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -197,11 +165,11 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('rolling', 'Rolling Days (past 30 days)')
 					.addOption('calendar', 'Previous Calendar Month')
 					.setValue(this.plugin.settings.monthlyDateRangeType)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.monthlyDateRangeType = value as
 							| 'rolling'
 							| 'calendar';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -218,12 +186,12 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('sentence', 'Full Sentence containing match')
 					.addOption('paragraph', 'Full Paragraph containing match')
 					.setValue(this.plugin.settings.extractContext)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.extractContext = value as
 							| 'exact'
 							| 'sentence'
 							| 'paragraph';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -237,11 +205,11 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('preserve', 'Preserve Markup')
 					.addOption('plain', 'Remove Formatting')
 					.setValue(this.plugin.settings.quickFormatting)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.quickFormatting = value as
 							| 'preserve'
 							| 'plain';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -256,12 +224,12 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.addOption('quote', 'Quote Blocks (> item)')
 					.addOption('date', 'Date Prefix (YYYY-MM-DD: item)')
 					.setValue(this.plugin.settings.outputFormat)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.plugin.settings.outputFormat = value as
 							| 'bullet'
 							| 'quote'
 							| 'date';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -274,15 +242,23 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder('#Daily')
 					.setValue(this.plugin.settings.requiredTag)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.requiredTag = value;
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 	}
 
 	private displayWeekdayTemplates(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName('Weekday Templates').setHeading();
+
+		// Native autocomplete list of note paths for the template inputs.
+		// (Replaces AbstractInputSuggest, which requires a newer minAppVersion.)
+		const datalist = containerEl.createEl('datalist');
+		datalist.id = TEMPLATE_DATALIST_ID;
+		this.app.vault.getMarkdownFiles().forEach((file) => {
+			datalist.createEl('option', { value: file.path });
+		});
 
 		new Setting(containerEl)
 			.setName('Enable weekday templates')
@@ -292,9 +268,9 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.enableWeekdayTemplates)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.enableWeekdayTemplates = value;
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}),
 			);
 
@@ -306,31 +282,32 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 						dropdown.addOption(i.toString(), name),
 					);
 					dropdown.setValue(rule.day.toString());
-					dropdown.onChange(async (value) => {
+					dropdown.onChange((value) => {
 						rule.day = parseInt(value);
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					});
 				})
 				.addText((text) => {
 					text.setPlaceholder('Template note path')
 						.setValue(rule.templatePath)
-						.onChange(async (value) => {
+						.onChange((value) => {
 							rule.templatePath = value.trim();
-							await this.plugin.saveSettings();
+							void this.plugin.saveSettings();
 						});
-					new TemplateFileSuggest(this.app, text.inputEl);
+					text.inputEl.setAttribute('list', TEMPLATE_DATALIST_ID);
 				})
 				.addExtraButton((btn) =>
 					btn
 						.setIcon('trash')
 						.setTooltip('Delete rule')
-						.onClick(async () => {
+						.onClick(() => {
 							this.plugin.settings.weekdayTemplates.splice(
 								index,
 								1,
 							);
-							await this.plugin.saveSettings();
-							this.display();
+							void this.plugin.saveSettings().then(() => {
+								this.display();
+							});
 						}),
 				);
 		});
@@ -339,13 +316,14 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			btn
 				.setButtonText('Add weekday rule')
 				.setCta()
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.weekdayTemplates.push({
 						day: 6,
 						templatePath: '',
 					});
-					await this.plugin.saveSettings();
-					this.display();
+					void this.plugin.saveSettings().then(() => {
+						this.display();
+					});
 				}),
 		);
 	}
