@@ -278,9 +278,9 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName(`Rule ${index + 1}`)
 				.addDropdown((dropdown) => {
-					WEEKDAY_NAMES.forEach((name, i) =>
-						dropdown.addOption(i.toString(), name),
-					);
+					WEEKDAY_NAMES.forEach((name, i) => {
+						dropdown.addOption(i.toString(), name);
+					});
 					dropdown.setValue(rule.day.toString());
 					dropdown.onChange((value) => {
 						rule.day = parseInt(value);
