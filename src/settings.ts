@@ -57,10 +57,6 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	getSettingDefinitions(): Record<string, unknown> {
-		return {};
-	}
-
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
