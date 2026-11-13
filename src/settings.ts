@@ -1,5 +1,18 @@
-import { App, PluginSettingTab, Setting, TFolder } from 'obsidian';
+import {
+	App,
+	DropdownComponent,
+	PluginSettingTab,
+	Setting,
+	SettingDefinitionItem,
+	TFolder,
+} from 'obsidian';
 import HighlightsExtractorPlugin from './main';
+import {
+	buildSettingDefinitions,
+	DESC,
+	OPTIONS,
+	WEEKDAY_NAMES,
+} from './settings-definitions';
 
 export interface WeekdayTemplateRule {
 	/** 0 = Sunday ... 6 = Saturday */
@@ -37,17 +50,9 @@ export const DEFAULT_SETTINGS: HighlightsExtractorSettings = {
 	weekdayTemplates: [],
 };
 
-const WEEKDAY_NAMES = [
-	'Sunday',
-	'Monday',
-	'Tuesday',
-	'Wednesday',
-	'Thursday',
-	'Friday',
-	'Saturday',
-];
-
 const TEMPLATE_DATALIST_ID = 'highlights-extractor-template-notes';
+
+type OptionKey = keyof typeof OPTIONS;
 
 export class HighlightsExtractorSettingTab extends PluginSettingTab {
 	plugin: HighlightsExtractorPlugin;
@@ -57,6 +62,28 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	// ---------- Declarative settings (Obsidian 1.13+) ----------
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return buildSettingDefinitions(this);
+	}
+
+	getControlValue(key: string): unknown {
+		return this.plugin.settings[key as keyof HighlightsExtractorSettings];
+	}
+
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		if (key === 'dailyNotesFolder' && typeof value === 'string') {
+			// The rest of the plugin uses '' for the vault root and no trailing slash.
+			value = value.replace(/\/+$/, '');
+		}
+		(this.plugin.settings as unknown as Record<string, unknown>)[key] =
+			value;
+		await this.plugin.saveSettings();
+	}
+
+	// ---------- Legacy imperative settings (Obsidian < 1.13) ----------
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -65,27 +92,11 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 			.setName('Highlights & Bold Extractor')
 			.setHeading();
 
-		new Setting(containerEl)
-			.setName('Output Location')
-			.setDesc('Choose where the extracted text will be generated.')
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('new-note', 'Create New Note')
-					.addOption('active-note', 'Append to Active Note')
-					.setValue(this.plugin.settings.outputLocation)
-					.onChange((value: string) => {
-						this.plugin.settings.outputLocation = value as
-							| 'new-note'
-							| 'active-note';
-						void this.plugin.saveSettings();
-					}),
-			);
+		this.addLegacyDropdown(containerEl, 'Output Location', 'outputLocation');
 
 		new Setting(containerEl)
 			.setName('Include Summary Header')
-			.setDesc(
-				'Include title and "Generated on: YYYY-MM-DD" header at the top of generated summaries.',
-			)
+			.setDesc(DESC.includeHeader)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.includeHeader)
@@ -105,7 +116,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Daily Notes Folder')
-			.setDesc('Select the folder where your daily notes are stored.')
+			.setDesc(DESC.dailyNotesFolder)
 			.addDropdown((dropdown) => {
 				dropdown.addOption('', 'Vault Root (/)');
 
@@ -124,9 +135,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Daily Notes Date Format')
-			.setDesc(
-				'Format of your daily notes file names (e.g. DD-MM-YYYY or YYYY-MM-DD). Used to identify daily files for the Timeframe commands and for weekday templates.',
-			)
+			.setDesc(DESC.dailyNotesFormat)
 			.addText((text) =>
 				text
 					.setPlaceholder('DD-MM-YYYY')
@@ -137,103 +146,36 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl)
-			.setName('Weekly Date Range Mode')
-			.setDesc('Choose how the "Last Week" date range is calculated.')
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('rolling', 'Rolling Days (past 7 days)')
-					.addOption('calendar', 'Previous Calendar Week')
-					.setValue(this.plugin.settings.weeklyDateRangeType)
-					.onChange((value: string) => {
-						this.plugin.settings.weeklyDateRangeType = value as
-							| 'rolling'
-							| 'calendar';
-						void this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Monthly Date Range Mode')
-			.setDesc('Choose how the "Last Month" date range is calculated.')
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('rolling', 'Rolling Days (past 30 days)')
-					.addOption('calendar', 'Previous Calendar Month')
-					.setValue(this.plugin.settings.monthlyDateRangeType)
-					.onChange((value: string) => {
-						this.plugin.settings.monthlyDateRangeType = value as
-							| 'rolling'
-							| 'calendar';
-						void this.plugin.saveSettings();
-					}),
-			);
+		this.addLegacyDropdown(
+			containerEl,
+			'Weekly Date Range Mode',
+			'weeklyDateRangeType',
+		);
+		this.addLegacyDropdown(
+			containerEl,
+			'Monthly Date Range Mode',
+			'monthlyDateRangeType',
+		);
 
 		this.displayWeekdayTemplates(containerEl);
 
 		new Setting(containerEl).setName('Formatting & Filters').setHeading();
 
-		new Setting(containerEl)
-			.setName('Extraction Context')
-			.setDesc('Default scope when extracting highlights/bold text.')
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('exact', 'Only Highlighted / Bold Text')
-					.addOption('sentence', 'Full Sentence containing match')
-					.addOption('paragraph', 'Full Paragraph containing match')
-					.setValue(this.plugin.settings.extractContext)
-					.onChange((value: string) => {
-						this.plugin.settings.extractContext = value as
-							| 'exact'
-							| 'sentence'
-							| 'paragraph';
-						void this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Quick Commands Formatting')
-			.setDesc(
-				'Choose whether to remove formatting (like == and **) when using quick extraction commands.',
-			)
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('preserve', 'Preserve Markup')
-					.addOption('plain', 'Remove Formatting')
-					.setValue(this.plugin.settings.quickFormatting)
-					.onChange((value: string) => {
-						this.plugin.settings.quickFormatting = value as
-							| 'preserve'
-							| 'plain';
-						void this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Output Format')
-			.setDesc(
-				'Choose how extracted text will be formatted in the summary note.',
-			)
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('bullet', 'Bullet Points (- item)')
-					.addOption('quote', 'Quote Blocks (> item)')
-					.addOption('date', 'Date Prefix (YYYY-MM-DD: item)')
-					.setValue(this.plugin.settings.outputFormat)
-					.onChange((value: string) => {
-						this.plugin.settings.outputFormat = value as
-							| 'bullet'
-							| 'quote'
-							| 'date';
-						void this.plugin.saveSettings();
-					}),
-			);
+		this.addLegacyDropdown(
+			containerEl,
+			'Extraction Context',
+			'extractContext',
+		);
+		this.addLegacyDropdown(
+			containerEl,
+			'Quick Commands Formatting',
+			'quickFormatting',
+		);
+		this.addLegacyDropdown(containerEl, 'Output Format', 'outputFormat');
 
 		new Setting(containerEl)
 			.setName('Required Tag Filter')
-			.setDesc(
-				'Only extract from notes containing this tag (e.g., #Daily). Leave blank to disable.',
-			)
+			.setDesc(DESC.requiredTag)
 			.addText((text) =>
 				text
 					.setPlaceholder('#Daily')
@@ -241,6 +183,24 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 					.onChange((value) => {
 						this.plugin.settings.requiredTag = value;
 						void this.plugin.saveSettings();
+					}),
+			);
+	}
+
+	private addLegacyDropdown(
+		containerEl: HTMLElement,
+		name: string,
+		key: OptionKey,
+	): void {
+		new Setting(containerEl)
+			.setName(name)
+			.setDesc(DESC[key])
+			.addDropdown((dropdown: DropdownComponent) =>
+				dropdown
+					.addOptions(OPTIONS[key])
+					.setValue(this.plugin.settings[key])
+					.onChange((value: string) => {
+						void this.setControlValue(key, value);
 					}),
 			);
 	}
@@ -258,9 +218,7 @@ export class HighlightsExtractorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable weekday templates')
-			.setDesc(
-				'When a new daily note is created, use a different template for specific weekdays instead of your default daily note template. The weekday is taken from the note name (see Daily Notes Date Format).',
-			)
+			.setDesc(DESC.enableWeekdayTemplates)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.enableWeekdayTemplates)
